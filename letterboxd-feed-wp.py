@@ -450,6 +450,9 @@ def main():
     parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
     parser.add_argument("--csv", action="store", default="reviews.csv")
     parser.add_argument("--dry-run", action="store_true", default=False)
+    parser.add_argument("--start-date", action="store")
+    parser.add_argument("--end-date", action="store")
+
 
     args = parser.parse_args()
 
