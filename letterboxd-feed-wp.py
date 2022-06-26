@@ -78,7 +78,7 @@ def spoiler_check(lb_url):
     return spoiler_flag
 
 
-def add_spoiler_field(csv_file_arg):
+def add_spoiler_field(csv_file_arg, dry_run):
     try:
         csv_file = open(csv_file_arg)
     except:
@@ -97,35 +97,40 @@ def add_spoiler_field(csv_file_arg):
         row.append(spoiler_flag)
         all.append(row)
 
-    writer.writerows(all)
+    if dry_run:
+        print(f"Dry run: would write {len(all)} rows")
+    else:
+        writer.writerows(all)
 
 
-def write_movie_to_db(db_cur, movie):
-    print(f"Writing {movie['title']} to database.")
+def write_movie_to_db(db_cur, movie, dry_run):
+    if dry_run:
+        print(f"Dry run: would write {movie['title']} to database.")
+    else:
+        print(f"Writing {movie['title']} to database.")
+        pub_ts = datetime.fromtimestamp(time.mktime(movie["timestamp"]))
+        try:
+            db_cur.execute(
+                "INSERT INTO lb_feed VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(title, year) DO NOTHING",
+                (
+                    movie["id"],
+                    movie["title"],
+                    pub_ts,
+                    movie["link"],
+                    movie["review"],
+                    movie["year"],
+                    movie["rating"],
+                    movie["spoiler"],
+                ),
+            )
+            db_cur.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error writing {movie['title']}: {e}")
+            return False
 
-    pub_ts = datetime.fromtimestamp(time.mktime(movie["timestamp"]))
-    try:
-        db_cur.execute(
-            "INSERT INTO lb_feed VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(title, year) DO NOTHING",
-            (
-                movie["id"],
-                movie["title"],
-                pub_ts,
-                movie["link"],
-                movie["review"],
-                movie["year"],
-                movie["rating"],
-                movie["spoiler"],
-            ),
-        )
-        db_cur.connection.commit()
-        return True
-    except sqlite3.Error as e:
-        print(f"Error writing {movie['title']}: {e}")
-        return False
 
-
-def write_movies_to_db(config, movies):
+def write_movies_to_db(config, movies, dry_run):
     db_name = config["local"]["db_name"]
     try:
         db_conn = sqlite3.connect(db_name)
@@ -136,7 +141,7 @@ def write_movies_to_db(config, movies):
     db_cur = db_conn.cursor()
 
     for movie in movies:
-        write_movie_to_db(db_cur, movie)
+        write_movie_to_db(db_cur, movie, dry_run)
 
     db_cur.close()
 
@@ -239,21 +244,24 @@ def fetch_lb_csv(csv_file_arg):
     return reviews
 
 
-def wp_post(config, post, post_id=False):
+def wp_post(config, post, dry_run, post_id=False):
     wp_post_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/posts'
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    if post_id:
-        response = requests.post(
-            f"{wp_post_api}/{post_id}", headers=wp_headers, json=post
-        )
-        # I was gonna hash the content and compare before updating but WP returns the
-        # content as rendered, which is different than the content as sent, so screw it
-
+    if dry_run:
+        print(f"Dry run: writing or updating post to WordPress.")
     else:
-        response = requests.post(wp_post_api, headers=wp_headers, json=post)
+        if post_id:
+            response = requests.post(
+                f"{wp_post_api}/{post_id}", headers=wp_headers, json=post
+            )
+            # I was gonna hash the content and compare before updating but WP returns the
+            # content as rendered, which is different than the content as sent, so screw it
+
+        else:
+            response = requests.post(wp_post_api, headers=wp_headers, json=post)
 
 
 def write_movies_to_wp_by_week(config):
@@ -355,20 +363,26 @@ def write_movies_to_wp_by_week(config):
             search_payload = {"search": post_title}
             response = requests.get(wp_search_api, params=search_payload)
             if not response.json():
-                print(f"posting {post_title}")
-                wp_post(config, post)
+                if dry_run:
+                    print(f"Dry run: not posting {post_title}")
+                else:
+                    print(f"posting {post_title}")
+                    wp_post(config, post, dry_run)
             else:
-                print(f"updating {post_title}")
-                # For fuck's sake clean this up
-                post_response = requests.get(
-                    f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
-                )
-                wp_post(config, post, post_id=post_response.json()["id"])
+                if dry_run:
+                    print(f"Dry run: not updating {post_title}")
+                else:
+                    print(f"updating {post_title}")
+                    # For fuck's sake clean this up
+                    post_response = requests.get(
+                        f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
+                    )
+                    wp_post(config, post, dry_run, post_id=post_response.json()["id"])
 
     return True
 
 
-def write_movies_to_wp(config):
+def write_movies_to_wp(config, dry_run):
     db_name = config["local"]["db_name"]
 
     wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
@@ -404,6 +418,8 @@ def write_movies_to_wp(config):
 
             # This is where you need to add some spoiler stuff -- also remember to
             # kill the error message a few lines up
+            
+            # Also add a check allowing us to just update a post
 
             post = {
                 "title": post_title,
@@ -412,9 +428,12 @@ def write_movies_to_wp(config):
                 "categories": post_categories,
                 "status": "publish",
             }
-
-            print(f"posting {movie[0]}")
-            # wp_post(config, post)
+            
+            if dry_run:
+                print(f"Dry run: not posting {movie[0]}")
+            else:
+                print(f"posting {movie[0]}")
+                # wp_post(config, post, dry_run)
         else:
             print(f"{movie[0]} found, not posting")
 
@@ -430,6 +449,7 @@ def main():
 
     parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
     parser.add_argument("--csv", action="store", default="reviews.csv")
+    parser.add_argument("--dry-run", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -438,16 +458,16 @@ def main():
 
     if args.action == "fetchrss":
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
-        write_movies_to_db(config, reviews)
+        write_movies_to_db(config, reviews, args.dry_run)
     elif args.action == "fetchcsv":
         reviews = fetch_lb_csv(args.csv)
-        write_movies_to_db(config, reviews)
+        write_movies_to_db(config, reviews, args.dry_run)
     elif args.action == "write":
-        write_movies_to_wp(config)
+        write_movies_to_wp(config, args.dry_run)
     elif args.action == "writeweeks":
-        write_movies_to_wp_by_week(config)
+        write_movies_to_wp_by_week(config, args.dry_run)
     elif args.action == "addspoilers":
-        add_spoiler_field(args.csv)
+        add_spoiler_field(args.csv, args.dry_run)
 
 
 if __name__ == "__main__":
