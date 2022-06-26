@@ -1,2 +1,6 @@
-venv
 lb_feed.conf
+.DS_Store
+Letterboxd Feed.bbprojectd
+lb_feed.sqlite
+csvs
+venv
