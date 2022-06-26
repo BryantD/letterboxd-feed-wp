@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 
-import requests
+import argparse
 import base64
 import configparser
-import feedparser
-import sqlite3
-import argparse
-import unicodedata
-import re
 import csv
-import time
 from datetime import datetime, date
-from time import mktime
-from bs4 import BeautifulSoup, Comment
-import xxhash
+import feedparser
+import re
+import sqlite3
 import sys
+import time
+import unicodedata
+
+from bs4 import BeautifulSoup, Comment
+import requests
+import xxhash
 
 
 def oxfordcomma(titles):
@@ -48,7 +48,9 @@ def clean_rss_review_html(review, spoiler_flag):
         img_p.parent.extract()
 
     if spoiler_flag:
-        spoiler = review_html.find(name="em", string="This review may contain spoilers.")
+        spoiler = review_html.find(
+            name="em", string="This review may contain spoilers."
+        )
         spoiler_p = spoiler.parent
         spoiler_p.extract()
 
@@ -69,10 +71,10 @@ def spoiler_check(lb_url):
         spoiler_flag = 1
     else:
         spoiler_flag = 0
-        
+
     # Nap a little to avoid too much traffic to Letterboxd
     time.sleep(5)
-    
+
     return spoiler_flag
 
 
@@ -101,7 +103,7 @@ def add_spoiler_field(csv_file_arg):
 def write_movie_to_db(db_cur, movie):
     print(f"Writing {movie['title']} to database.")
 
-    pub_ts = datetime.fromtimestamp(mktime(movie["timestamp"]))
+    pub_ts = datetime.fromtimestamp(time.mktime(movie["timestamp"]))
     try:
         db_cur.execute(
             "INSERT INTO lb_feed VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(title, year) DO NOTHING",
@@ -154,15 +156,15 @@ def fetch_lb_rss(user):
                 spoiler_flag = 1
             else:
                 spoiler_flag = 0
-            
+
             # Either the date we watched the movie, or the date the review was published
             if movie.letterboxd_watcheddate:
                 timestamp = time.strptime(movie.letterboxd_watcheddate, "%Y-%m-%d")
             else:
                 timestamp = movie.published_parsed
-                
-            clean_review = clean_rss_review_html(movie.summary, spoiler_flag)            
-            
+
+            clean_review = clean_rss_review_html(movie.summary, spoiler_flag)
+
             reviews.append(
                 {
                     "title": movie.letterboxd_filmtitle,
@@ -219,8 +221,8 @@ def fetch_lb_csv(csv_file_arg):
         if "Spoilers" in row:
             spoiler_flag = row["Spoilers"]
         else:
-            spoiler_flag = spoiler_check(row["Letterboxd URI"])           
-            
+            spoiler_flag = spoiler_check(row["Letterboxd URI"])
+
         reviews.append(
             {
                 "title": row["Name"],
@@ -252,7 +254,7 @@ def wp_post(config, post, post_id=False):
 
     else:
         response = requests.post(wp_post_api, headers=wp_headers, json=post)
-        
+
 
 def write_movies_to_wp_by_week(config):
     db_name = config["local"]["db_name"]
@@ -329,7 +331,9 @@ def write_movies_to_wp_by_week(config):
             # foo.find() provides the first tag in the document
 
             title_list_p = post_html.new_tag("p")
-            title_list_p.string = f"Movies reviewed this week: {oxfordcomma(title_list)}."
+            title_list_p.string = (
+                f"Movies reviewed this week: {oxfordcomma(title_list)}."
+            )
             post_html.find().insert_before(title_list_p)
 
             more_p = post_html.new_tag("p")
