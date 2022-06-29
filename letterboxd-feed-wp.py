@@ -392,10 +392,6 @@ def write_movies_to_wp(config, dry_run):
 
     post_categories = config["wp"]["post_categories"]
 
-    print(
-        "Bailing out because you never wrote spoiler wrapper code for write_movies_to_wp()"
-    )
-
     try:
         db_conn = sqlite3.connect(
             db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
@@ -407,17 +403,24 @@ def write_movies_to_wp(config, dry_run):
     db_cur = db_conn.cursor()
 
     for movie in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoiler FROM lb_feed"
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed"
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
+        print(post_title)
         search_payload = {"search": post_title}
         response = requests.get(wp_search_api, params=search_payload)
         if not response.json():
             post_html = BeautifulSoup(movie[3], "html.parser")
             post_date = datetime.isoformat(movie[1])
 
-            # This is where you need to add some spoiler stuff -- also remember to
-            # kill the error message a few lines up
+            if movie[6]:
+                more_p = post_html.new_tag("p")
+                more_p.string = Comment("more")
+                post_html.find().insert_before(more_p)
+                
+                spoilers_p = post_html.new_tag("p")
+                spoilers_p.string = "This review contains spoilers."
+                post_html.find().insert_before(spoilers_p)
             
             # Also add a check allowing us to just update a post
 
@@ -431,9 +434,10 @@ def write_movies_to_wp(config, dry_run):
             
             if dry_run:
                 print(f"Dry run: not posting {movie[0]}")
+                print(str(post_html))
             else:
                 print(f"posting {movie[0]}")
-                # wp_post(config, post, dry_run)
+                wp_post(config, post, dry_run)
         else:
             print(f"{movie[0]} found, not posting")
 
