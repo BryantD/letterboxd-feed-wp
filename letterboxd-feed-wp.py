@@ -101,6 +101,32 @@ def add_spoiler_field(csv_file_arg, dry_run):
         print(f"Dry run: would write {len(all)} rows")
     else:
         writer.writerows(all)
+        
+        
+def find_wp_post(config, post_title):
+    post_id = 0
+    page = 1
+    
+    wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
+    wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
+    wp_token = base64.b64encode(wp_credentials.encode())
+    wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
+    
+    search_payload = {
+        "search": post_title, 
+        "_fields": "title,id",
+        "page": page,
+    }
+    response = requests.get(wp_search_api, params=search_payload)
+    
+    while len(response.json()) > 0:
+        for result in response.json():
+            if result["title"] == post_title:
+                post_id = result["id"]
+        search_payload["page"] = search_payload["page"] + 1
+        response = requests.get(wp_search_api, params=search_payload)
+
+    return post_id
 
 
 def write_movie_to_db(db_cur, movie, dry_run):
@@ -448,7 +474,7 @@ def main():
     parser.add_argument(
         "action",
         help="Required positional argument",
-        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers"],
+        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers", "find"],
     )
 
     parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
@@ -456,6 +482,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("--start-date", action="store")
     parser.add_argument("--end-date", action="store")
+    parser.add_argument("--title", action="store")
 
 
     args = parser.parse_args()
@@ -475,6 +502,9 @@ def main():
         write_movies_to_wp_by_week(config, args.dry_run)
     elif args.action == "addspoilers":
         add_spoiler_field(args.csv, args.dry_run)
+    elif args.action == "find":
+        post_id = find_wp_post(config, args.title)
+        print(post_id)
 
 
 if __name__ == "__main__":
