@@ -101,25 +101,25 @@ def add_spoiler_field(csv_file_arg, dry_run):
         print(f"Dry run: would write {len(all)} rows")
     else:
         writer.writerows(all)
-        
-        
+
+
 def find_wp_post(config, post_title):
     post_id = 0
     page = 1
-    
+
     wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
-    
+
     print(f"searching for {post_title}")
     search_payload = {
-        "search": post_title, 
+        "search": post_title,
         "_fields": "title,id",
         "page": page,
     }
     response = requests.get(wp_search_api, params=search_payload)
-    
+
     while len(response.json()) > 0:
         for result in response.json():
             if result["title"] == post_title:
@@ -154,7 +154,7 @@ def write_movie_to_db(db_cur, movie, dry_run):
             db_cur.connection.commit()
             return True
         except sqlite3.Error as e:
-            print(f"Error writing {movie['title']}: {e}")
+            print(f"ERROR: couldn't write {movie['title']}: {e}")
             return False
 
 
@@ -444,11 +444,11 @@ def write_movies_to_wp(config, dry_run):
             more_p = post_html.new_tag("p")
             more_p.string = Comment("more")
             post_html.find().insert_before(more_p)
-            
+
             spoilers_p = post_html.new_tag("p")
             spoilers_p.string = "This review contains spoilers."
             post_html.find().insert_before(spoilers_p)
-            
+
         post = {
             "title": post_title,
             "date": post_date,
@@ -456,7 +456,7 @@ def write_movies_to_wp(config, dry_run):
             "categories": post_categories,
             "status": "publish",
         }
-        
+
         if dry_run:
             print(f"Dry run: not posting {movie[0]}")
             print(str(post_html))
@@ -481,27 +481,26 @@ def main():
     parser.add_argument("--end-date", action="store")
     parser.add_argument("--title", action="store")
 
-
     args = parser.parse_args()
 
     config = configparser.ConfigParser()
     config.read(args.config)
-    
+
     # Check for all the config options
     option_missing = False
     for wp_option in ["wp_key", "wp_url", "wp_user"]:
         if not config.has_option("wp", wp_option):
             option_missing = True
             print(f"ERROR: wp/{wp_option} missing from {args.config}")
-            
+
     for lb_option in ["lb_user"]:
         if not config.has_option("lb", lb_option):
             option_missing = True
             print(f"ERROR: lb/{lb_option} missing from {args.config}")
-            
+
     if not config.has_option("local", "db_name"):
         config["local"]["db_name"] = "lb_feed.sqlite"
-            
+
     if option_missing:
         sys.exit()
 
