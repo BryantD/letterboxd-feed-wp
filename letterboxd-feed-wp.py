@@ -464,6 +464,7 @@ def write_movies_to_wp(config, dry_run):
             print(f"posting {movie[0]}")
             wp_post(config, post, dry_run, post_id=existing_post_id)
 
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -485,6 +486,24 @@ def main():
 
     config = configparser.ConfigParser()
     config.read(args.config)
+    
+    # Check for all the config options
+    option_missing = False
+    for wp_option in ["wp_key", "wp_url", "wp_user"]:
+        if not config.has_option("wp", wp_option):
+            option_missing = True
+            print(f"ERROR: wp/{wp_option} missing from {args.config}")
+            
+    for lb_option in ["lb_user"]:
+        if not config.has_option("lb", lb_option):
+            option_missing = True
+            print(f"ERROR: lb/{lb_option} missing from {args.config}")
+            
+    if not config.has_option("local", "db_name"):
+        config["local"]["db_name"] = "lb_feed.sqlite"
+            
+    if option_missing:
+        sys.exit()
 
     if args.action == "fetchrss":
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
