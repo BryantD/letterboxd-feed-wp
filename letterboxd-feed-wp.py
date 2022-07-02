@@ -346,18 +346,23 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
         print("Error connecting to db {db_name}")
         return False
 
+    # Convert date objects to beginning or end of day datetimes, as appropriate
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
     db_cur = db_conn.cursor()
 
-    for row in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed ORDER BY ts ASC"
+    for movie in db_cur.execute(
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+        ([start_datetime, end_datetime]),
     ):
-        year = row[1].year
-        week = row[1].isocalendar().week
+        year = movie[1].year
+        week = movie[1].isocalendar().week
         if year not in movie_list:
             movie_list[year] = {}
         if week not in movie_list[year]:
             movie_list[year][week] = []
-        movie_list[year][week].append(row)
+        movie_list[year][week].append(movie)
 
     for year in movie_list:
         for week in movie_list[year]:
@@ -461,10 +466,15 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
         print("Error connecting to db {db_name}")
         return
 
+    # Convert date objects to beginning or end of day datetimes, as appropriate
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
     db_cur = db_conn.cursor()
 
     for movie in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed"
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+        ([start_datetime, end_datetime]),
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
         print(post_title)
