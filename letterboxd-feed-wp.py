@@ -103,11 +103,38 @@ def add_spoiler_field(csv_file_arg, dry_run):
         writer.writerows(all)
 
 
+def find_wp_api_url(wp_base_url):
+    try:
+        response = requests.head(wp_base_url)
+    except requests.RequestException as e:
+        print(f"ERROR: couldn't get base WP URL {wp_base_url}: {e}")
+        return False
+
+    if "Link" not in response.headers:
+        print(f"ERROR: couldn't find WP API link at {wp_base_url}")
+        return False
+
+    wp_api_url = response.links["https://api.w.org/"]["url"]
+
+    try:
+        response = requests.get(wp_api_url)
+    except requests.RequestException as e:
+        print(f"ERROR: couldn't get WP API URIL{wp_api_url}: {e}")
+        return False
+
+    if not "wp/v2" in response.json()["namespaces"]:
+        print(f"ERROR: WP installation doesn't appear to support the v2 API")
+        print(f"ERROR: Are you running version 4.7+?")
+
+    return wp_api_url
+
+
 def find_wp_post(config, post_title):
     post_id = 0
     page = 1
 
-    wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
+    wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
+    wp_search_api = f'{wp_api_url}wp/v2/search'
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
@@ -118,15 +145,18 @@ def find_wp_post(config, post_title):
         "_fields": "title,id",
         "page": page,
     }
-    response = requests.get(wp_search_api, params=search_payload)
 
-    while len(response.json()) > 0:
+    while search_payload["page"]:
+        response = requests.get(wp_search_api, params=search_payload)
         for result in response.json():
             if result["title"] == post_title:
                 post_id = result["id"]
                 print(f"found {post_id}")
-        search_payload["page"] = search_payload["page"] + 1
-        response = requests.get(wp_search_api, params=search_payload)
+
+        if "next" in response.links:
+            search_payload["page"] = search_payload["page"] + 1
+        else:
+            search_payload["page"] = 0
 
     return post_id
 
@@ -273,7 +303,8 @@ def fetch_lb_csv(csv_file_arg):
 
 
 def wp_post(config, post, dry_run, post_id=False):
-    wp_post_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/posts'
+    wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
+    wp_post_api = f'{wp_api_url}wp/v2/posts'
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
@@ -295,7 +326,8 @@ def wp_post(config, post, dry_run, post_id=False):
 def write_movies_to_wp_by_week(config, dry_run):
     db_name = config["local"]["db_name"]
 
-    wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
+    wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
+    wp_search_api = f"{wp_api_url}wp/v2/search"
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
@@ -413,7 +445,8 @@ def write_movies_to_wp_by_week(config, dry_run):
 def write_movies_to_wp(config, dry_run):
     db_name = config["local"]["db_name"]
 
-    wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
+    wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
+    wp_search_api = f"{wp_api_url}wp/v2/search"
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
