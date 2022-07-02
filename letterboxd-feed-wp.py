@@ -503,13 +503,13 @@ def main():
 
     parser.add_argument(
         "action",
-        help="Required positional argument",
-        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers", "find"],
+        help="Action for the script to take",
+        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers"],
     )
 
-    parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
-    parser.add_argument("--csv", action="store", default="reviews.csv")
-    parser.add_argument("--dry-run", action="store_true", default=False)
+    parser.add_argument("-c", "--config", action="store", default="lb_feed.conf", help="Configuration files (defaults to lb_feed.conf)")
+    parser.add_argument("--csv", action="store", default="reviews.csv", help="Letterboxd export file to read from (defaults to reviews.csv)")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Don't write to WordPress or SQLite DB")
     parser.add_argument(
         "--start-date",
         action="store",
