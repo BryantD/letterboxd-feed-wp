@@ -101,6 +101,34 @@ def add_spoiler_field(csv_file_arg, dry_run):
         print(f"Dry run: would write {len(all)} rows")
     else:
         writer.writerows(all)
+        
+        
+def find_wp_post(config, post_title):
+    post_id = 0
+    page = 1
+    
+    wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
+    wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
+    wp_token = base64.b64encode(wp_credentials.encode())
+    wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
+    
+    print(f"searching for {post_title}")
+    search_payload = {
+        "search": post_title, 
+        "_fields": "title,id",
+        "page": page,
+    }
+    response = requests.get(wp_search_api, params=search_payload)
+    
+    while len(response.json()) > 0:
+        for result in response.json():
+            if result["title"] == post_title:
+                post_id = result["id"]
+                print(f"found {post_id}")
+        search_payload["page"] = search_payload["page"] + 1
+        response = requests.get(wp_search_api, params=search_payload)
+
+    return post_id
 
 
 def write_movie_to_db(db_cur, movie, dry_run):
@@ -264,7 +292,7 @@ def wp_post(config, post, dry_run, post_id=False):
             response = requests.post(wp_post_api, headers=wp_headers, json=post)
 
 
-def write_movies_to_wp_by_week(config):
+def write_movies_to_wp_by_week(config, dry_run):
     db_name = config["local"]["db_name"]
 
     wp_search_api = f'{config["wp"]["wp_url"]}/wp-json/wp/v2/search'
@@ -312,9 +340,9 @@ def write_movies_to_wp_by_week(config):
 
             for movie in movie_list[year][week]:
                 movie_title = movie[0]
-                movie_year = int(movie[5])
+                movie_year = int(movie[4])
 
-                review_title = title_string(movie_title, movie_year, movie[4])
+                review_title = title_string(movie_title, movie_year, movie[5])
                 title_list.append(f"[cite]{movie_title}[/cite]")
 
                 movie_review_html = BeautifulSoup(movie[3], "html.parser")
@@ -407,40 +435,34 @@ def write_movies_to_wp(config, dry_run):
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
         print(post_title)
-        search_payload = {"search": post_title}
-        response = requests.get(wp_search_api, params=search_payload)
-        if not response.json():
-            post_html = BeautifulSoup(movie[3], "html.parser")
-            post_date = datetime.isoformat(movie[1])
+        existing_post_id = find_wp_post(config, post_title)
 
-            if movie[6]:
-                more_p = post_html.new_tag("p")
-                more_p.string = Comment("more")
-                post_html.find().insert_before(more_p)
-                
-                spoilers_p = post_html.new_tag("p")
-                spoilers_p.string = "This review contains spoilers."
-                post_html.find().insert_before(spoilers_p)
-            
-            # Also add a check allowing us to just update a post
+        post_html = BeautifulSoup(movie[3], "html.parser")
+        post_date = datetime.isoformat(movie[1])
 
-            post = {
-                "title": post_title,
-                "date": post_date,
-                "content": str(post_html),
-                "categories": post_categories,
-                "status": "publish",
-            }
+        if movie[6]:
+            more_p = post_html.new_tag("p")
+            more_p.string = Comment("more")
+            post_html.find().insert_before(more_p)
             
-            if dry_run:
-                print(f"Dry run: not posting {movie[0]}")
-                print(str(post_html))
-            else:
-                print(f"posting {movie[0]}")
-                wp_post(config, post, dry_run)
+            spoilers_p = post_html.new_tag("p")
+            spoilers_p.string = "This review contains spoilers."
+            post_html.find().insert_before(spoilers_p)
+            
+        post = {
+            "title": post_title,
+            "date": post_date,
+            "content": str(post_html),
+            "categories": post_categories,
+            "status": "publish",
+        }
+        
+        if dry_run:
+            print(f"Dry run: not posting {movie[0]}")
+            print(str(post_html))
         else:
-            print(f"{movie[0]} found, not posting")
-
+            print(f"posting {movie[0]}")
+            wp_post(config, post, dry_run, post_id=existing_post_id)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -448,7 +470,7 @@ def main():
     parser.add_argument(
         "action",
         help="Required positional argument",
-        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers"],
+        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers", "find"],
     )
 
     parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
@@ -456,6 +478,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("--start-date", action="store")
     parser.add_argument("--end-date", action="store")
+    parser.add_argument("--title", action="store")
 
 
     args = parser.parse_args()
@@ -475,6 +498,9 @@ def main():
         write_movies_to_wp_by_week(config, args.dry_run)
     elif args.action == "addspoilers":
         add_spoiler_field(args.csv, args.dry_run)
+    elif args.action == "find":
+        post_id = find_wp_post(config, args.title)
+        print(post_id)
 
 
 if __name__ == "__main__":
