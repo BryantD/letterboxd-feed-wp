@@ -134,7 +134,7 @@ def find_wp_post(config, post_title):
     page = 1
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
-    wp_search_api = f'{wp_api_url}wp/v2/search'
+    wp_search_api = f"{wp_api_url}wp/v2/search"
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
@@ -304,7 +304,7 @@ def fetch_lb_csv(csv_file_arg):
 
 def wp_post(config, post, dry_run, post_id=False):
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
-    wp_post_api = f'{wp_api_url}wp/v2/posts'
+    wp_post_api = f"{wp_api_url}wp/v2/posts"
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
@@ -323,7 +323,7 @@ def wp_post(config, post, dry_run, post_id=False):
             response = requests.post(wp_post_api, headers=wp_headers, json=post)
 
 
-def write_movies_to_wp_by_week(config, dry_run):
+def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     db_name = config["local"]["db_name"]
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
@@ -346,18 +346,23 @@ def write_movies_to_wp_by_week(config, dry_run):
         print("Error connecting to db {db_name}")
         return False
 
+    # Convert date objects to beginning or end of day datetimes, as appropriate
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
     db_cur = db_conn.cursor()
 
-    for row in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed ORDER BY ts ASC"
+    for movie in db_cur.execute(
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+        ([start_datetime, end_datetime]),
     ):
-        year = row[1].year
-        week = row[1].isocalendar().week
+        year = movie[1].year
+        week = movie[1].isocalendar().week
         if year not in movie_list:
             movie_list[year] = {}
         if week not in movie_list[year]:
             movie_list[year][week] = []
-        movie_list[year][week].append(row)
+        movie_list[year][week].append(movie)
 
     for year in movie_list:
         for week in movie_list[year]:
@@ -442,7 +447,7 @@ def write_movies_to_wp_by_week(config, dry_run):
     return True
 
 
-def write_movies_to_wp(config, dry_run):
+def write_movies_to_wp(config, dry_run, start_date, end_date):
     db_name = config["local"]["db_name"]
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
@@ -461,10 +466,15 @@ def write_movies_to_wp(config, dry_run):
         print("Error connecting to db {db_name}")
         return
 
+    # Convert date objects to beginning or end of day datetimes, as appropriate
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
     db_cur = db_conn.cursor()
 
     for movie in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed"
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+        ([start_datetime, end_datetime]),
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
         print(post_title)
@@ -503,16 +513,43 @@ def main():
 
     parser.add_argument(
         "action",
-        help="Required positional argument",
-        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers", "find"],
+        help="Action for the script to take",
+        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers"],
     )
 
-    parser.add_argument("-c", "--config", action="store", default="lb_feed.conf")
-    parser.add_argument("--csv", action="store", default="reviews.csv")
-    parser.add_argument("--dry-run", action="store_true", default=False)
-    parser.add_argument("--start-date", action="store")
-    parser.add_argument("--end-date", action="store")
-    parser.add_argument("--title", action="store")
+    parser.add_argument(
+        "-c",
+        "--config",
+        action="store",
+        default="lb_feed.conf",
+        help="Configuration files (defaults to lb_feed.conf)",
+    )
+    parser.add_argument(
+        "--csv",
+        action="store",
+        default="reviews.csv",
+        help="Letterboxd export file to read from (defaults to reviews.csv)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Don't write to WordPress or SQLite DB",
+    )
+    parser.add_argument(
+        "--start-date",
+        action="store",
+        type=date.fromisoformat,
+        default="1970-01-01",
+        help="Start date for posts in YYYY-MM-DD format (defaults to 1970-01-01)",
+    )
+    parser.add_argument(
+        "--end-date",
+        action="store",
+        type=date.fromisoformat,
+        default=date.today(),
+        help="End date for posts in YYYY-MM-DD format (defaults to today)",
+    )
 
     args = parser.parse_args()
 
@@ -544,14 +581,11 @@ def main():
         reviews = fetch_lb_csv(args.csv)
         write_movies_to_db(config, reviews, args.dry_run)
     elif args.action == "write":
-        write_movies_to_wp(config, args.dry_run)
+        write_movies_to_wp(config, args.dry_run, args.start_date, args.end_date)
     elif args.action == "writeweeks":
-        write_movies_to_wp_by_week(config, args.dry_run)
+        write_movies_to_wp_by_week(config, args.dry_run, args.start_date, args.end_date)
     elif args.action == "addspoilers":
         add_spoiler_field(args.csv, args.dry_run)
-    elif args.action == "find":
-        post_id = find_wp_post(config, args.title)
-        print(post_id)
 
 
 if __name__ == "__main__":
