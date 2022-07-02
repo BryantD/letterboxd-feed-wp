@@ -340,9 +340,9 @@ def write_movies_to_wp_by_week(config, dry_run):
 
             for movie in movie_list[year][week]:
                 movie_title = movie[0]
-                movie_year = int(movie[5])
+                movie_year = int(movie[4])
 
-                review_title = title_string(movie_title, movie_year, movie[4])
+                review_title = title_string(movie_title, movie_year, movie[5])
                 title_list.append(f"[cite]{movie_title}[/cite]")
 
                 movie_review_html = BeautifulSoup(movie[3], "html.parser")
