@@ -154,7 +154,7 @@ def write_movie_to_db(db_cur, movie, dry_run):
             db_cur.connection.commit()
             return True
         except sqlite3.Error as e:
-            print(f"Error writing {movie['title']}: {e}")
+            print(f"ERROR: couldn't write {movie['title']}: {e}")
             return False
 
 
