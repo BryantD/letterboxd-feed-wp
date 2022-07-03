@@ -156,7 +156,7 @@ def find_wp_post(config, post_title):
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    print(f"searching for {post_title}")
+    print(f"Searching for {post_title}")
     search_payload = {
         "search": post_title,
         "_fields": "title,id",
@@ -168,7 +168,7 @@ def find_wp_post(config, post_title):
         for result in response.json():
             if result["title"] == post_title:
                 post_id = result["id"]
-                print(f"found {post_id}")
+                print(f"\tFound (post id: {post_id})")
 
         if "next" in response.links:
             search_payload["page"] = search_payload["page"] + 1
@@ -327,7 +327,7 @@ def wp_post(config, post, dry_run, post_id=False):
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     if dry_run:
-        print(f"Dry run: writing or updating post to WordPress.")
+        print(f"\tDRY RUN: no changes made to WordPress")
     else:
         if post_id:
             response = requests.post(
@@ -439,24 +439,13 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                 "status": "publish",
             }
 
-            search_payload = {"search": post_title}
-            response = requests.get(wp_search_api, params=search_payload)
-            if not response.json():
-                if dry_run:
-                    print(f"Dry run: not posting {post_title}")
-                else:
-                    print(f"posting {post_title}")
-                    wp_post(config, post, dry_run)
+            existing_post_id = find_wp_post(config, post_title)
+            if existing_post_id:
+                print(f"Updating {post_title} (post id: {existing_post_id})")
             else:
-                if dry_run:
-                    print(f"Dry run: not updating {post_title}")
-                else:
-                    print(f"updating {post_title}")
-# For fuck's sake clean this up
-                    post_response = requests.get(
-                        f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
-                    )
-                    wp_post(config, post, dry_run, post_id=post_response.json()["id"])
+                print(f"Posting {post_title}")
+                
+            wp_post(config, post, dry_run, post_id=existing_post_id)
 
     return True
 
@@ -489,8 +478,6 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
         ([start_datetime, end_datetime]),
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
-        print(post_title)
-        existing_post_id = find_wp_post(config, post_title)
 
         post_html = BeautifulSoup(movie[3], "html.parser")
         post_date = datetime.isoformat(movie[1])
@@ -513,12 +500,14 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
             "status": "publish",
         }
 
-        if dry_run:
-            print(f"Dry run: not posting {movie[0]}")
-            print(str(post_html))
+        existing_post_id = find_wp_post(config, post_title)
+
+        if existing_post_id:
+            print(f"Updating {post_title} (post id: {existing_post_id})")
         else:
-            print(f"posting {movie[0]}")
-            wp_post(config, post, dry_run, post_id=existing_post_id)
+            print(f"Posting {post_title}")
+
+        wp_post(config, post, dry_run, post_id=existing_post_id)
 
 
 def main():
