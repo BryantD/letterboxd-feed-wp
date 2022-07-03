@@ -129,6 +129,23 @@ def find_wp_api_url(wp_base_url):
     return wp_api_url
 
 
+def clean_wp_post_option(option_string):
+    option_string.replace(" ", "")
+    
+    # Have a hairy regexp
+    #    ^            anchors at the start of the string
+    #    (\d+,{0,1})  any number of digits, optionally followed by a comma
+    #    *            the previous group can appear zero or more times 
+    #                     this won't match an ID by itself, but the next bit will
+    #    \d+          any number of digits
+    #    $            anchors at the end of the string
+    
+    if re.search("^(\d+,{0,1})+\d+$", option_string):
+        return option_string
+    else:
+        return False
+
+
 def find_wp_post(config, post_title):
     post_id = 0
     page = 1
@@ -566,18 +583,22 @@ def main():
     if option_missing:
         sys.exit()
 
-    # Check for config options that can be absent 
+    # Check for config options that can be absent
     if not config.has_option("local", "db_name"):
         config["local"]["db_name"] = "lb_feed.sqlite"
-        
-    if config.has_option("wp", "post_categories"):
-        post_categories = config["wp"]["post_categories"]
-    else:
-        config["wp"]["post_categories"] = ""
-    if config.has_option("wp", "post_tags"):
-        post_tags = config["wp"]["post_tags"]
-    else:
-        config["wp"]["post_tags"] = ""
+
+    for wp_post_option in ["post_categories", "post_tags"]:
+        if config.has_option("wp", wp_post_option):
+            clean_option_string = clean_wp_post_option(config["wp"][wp_post_option])
+            if clean_option_string:
+                config["wp"][wp_post_option] = clean_option_string
+            else:
+                print(
+                    f"ERROR: {wp_post_option} should be a comma separated list of digits, but is \"{config['wp'][wp_post_option]}\""
+                )
+                sys.exit()
+        else:
+            config["wp"][wp_post_option] = ""
 
     if args.action == "fetchrss":
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
