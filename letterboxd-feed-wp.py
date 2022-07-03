@@ -434,8 +434,8 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                 "title": post_title,
                 "date": post_date,
                 "content": str(post_html),
-                "categories": post_categories,
-                "tags": post_tags,
+                "categories": config["wp"]["post_categories"],
+                "tags": config["wp"]["post_tags"],
                 "status": "publish",
             }
 
@@ -452,7 +452,7 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                     print(f"Dry run: not updating {post_title}")
                 else:
                     print(f"updating {post_title}")
-                    # For fuck's sake clean this up
+# For fuck's sake clean this up
                     post_response = requests.get(
                         f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
                     )
@@ -508,7 +508,8 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
             "title": post_title,
             "date": post_date,
             "content": str(post_html),
-            "categories": post_categories,
+            "categories": config["wp"]["post_categories"],
+            "tags": config["wp"]["post_tags"],
             "status": "publish",
         }
 
