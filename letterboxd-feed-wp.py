@@ -332,9 +332,6 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    post_categories = config["wp"]["post_categories"]
-    post_tags = config["wp"]["post_tags"]
-
     movie_list = {}
     date_fmt = "%-m/%-d/%Y"  # UNIX only, will fail under Windows
 
@@ -456,8 +453,6 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    post_categories = config["wp"]["post_categories"]
-
     try:
         db_conn = sqlite3.connect(
             db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
@@ -556,7 +551,7 @@ def main():
     config = configparser.ConfigParser()
     config.read(args.config)
 
-    # Check for all the config options
+    # Check for necessary config options
     option_missing = False
     for wp_option in ["wp_key", "wp_url", "wp_user"]:
         if not config.has_option("wp", wp_option):
@@ -568,11 +563,21 @@ def main():
             option_missing = True
             print(f"ERROR: lb/{lb_option} missing from {args.config}")
 
-    if not config.has_option("local", "db_name"):
-        config["local"]["db_name"] = "lb_feed.sqlite"
-
     if option_missing:
         sys.exit()
+
+    # Check for config options that can be absent 
+    if not config.has_option("local", "db_name"):
+        config["local"]["db_name"] = "lb_feed.sqlite"
+        
+    if config.has_option("wp", "post_categories"):
+        post_categories = config["wp"]["post_categories"]
+    else:
+        config["wp"]["post_categories"] = ""
+    if config.has_option("wp", "post_tags"):
+        post_tags = config["wp"]["post_tags"]
+    else:
+        config["wp"]["post_tags"] = ""
 
     if args.action == "fetchrss":
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
