@@ -129,6 +129,23 @@ def find_wp_api_url(wp_base_url):
     return wp_api_url
 
 
+def clean_wp_post_option(option_string):
+    option_string.replace(" ", "")
+    
+    # Have a hairy regexp
+    #    ^            anchors at the start of the string
+    #    (\d+,{0,1})  any number of digits, optionally followed by a comma
+    #    *            the previous group can appear zero or more times 
+    #                     this won't match an ID by itself, but the next bit will
+    #    \d+          any number of digits
+    #    $            anchors at the end of the string
+    
+    if re.search("^(\d+,{0,1})+\d+$", option_string):
+        return option_string
+    else:
+        return False
+
+
 def find_wp_post(config, post_title):
     post_id = 0
     page = 1
@@ -332,9 +349,6 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    post_categories = config["wp"]["post_categories"]
-    post_tags = config["wp"]["post_tags"]
-
     movie_list = {}
     date_fmt = "%-m/%-d/%Y"  # UNIX only, will fail under Windows
 
@@ -420,8 +434,8 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                 "title": post_title,
                 "date": post_date,
                 "content": str(post_html),
-                "categories": post_categories,
-                "tags": post_tags,
+                "categories": config["wp"]["post_categories"],
+                "tags": config["wp"]["post_tags"],
                 "status": "publish",
             }
 
@@ -438,7 +452,7 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                     print(f"Dry run: not updating {post_title}")
                 else:
                     print(f"updating {post_title}")
-                    # For fuck's sake clean this up
+# For fuck's sake clean this up
                     post_response = requests.get(
                         f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
                     )
@@ -455,8 +469,6 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
-
-    post_categories = config["wp"]["post_categories"]
 
     try:
         db_conn = sqlite3.connect(
@@ -496,7 +508,8 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
             "title": post_title,
             "date": post_date,
             "content": str(post_html),
-            "categories": post_categories,
+            "categories": config["wp"]["post_categories"],
+            "tags": config["wp"]["post_tags"],
             "status": "publish",
         }
 
@@ -556,7 +569,7 @@ def main():
     config = configparser.ConfigParser()
     config.read(args.config)
 
-    # Check for all the config options
+    # Check for necessary config options
     option_missing = False
     for wp_option in ["wp_key", "wp_url", "wp_user"]:
         if not config.has_option("wp", wp_option):
@@ -568,11 +581,25 @@ def main():
             option_missing = True
             print(f"ERROR: lb/{lb_option} missing from {args.config}")
 
+    if option_missing:
+        sys.exit()
+
+    # Check for config options that can be absent
     if not config.has_option("local", "db_name"):
         config["local"]["db_name"] = "lb_feed.sqlite"
 
-    if option_missing:
-        sys.exit()
+    for wp_post_option in ["post_categories", "post_tags"]:
+        if config.has_option("wp", wp_post_option):
+            clean_option_string = clean_wp_post_option(config["wp"][wp_post_option])
+            if clean_option_string:
+                config["wp"][wp_post_option] = clean_option_string
+            else:
+                print(
+                    f"ERROR: {wp_post_option} should be a comma separated list of digits, but is \"{config['wp'][wp_post_option]}\""
+                )
+                sys.exit()
+        else:
+            config["wp"][wp_post_option] = ""
 
     if args.action == "fetchrss":
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
