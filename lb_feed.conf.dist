@@ -2,8 +2,8 @@
 wp_key = <WP key goes here>
 wp_url = https://example.com/
 wp_user = John
-post_categories = 1
-post_tags = 1
+# post_categories = 1
+# post_tags = 1
 
 [lb]
 lb_user = JohnDoe
