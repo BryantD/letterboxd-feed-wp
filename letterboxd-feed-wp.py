@@ -1,5 +1,27 @@
 #!/usr/bin/env python3
 
+# MIT License
+#
+# Copyright (c) 2022 Bryant Durrell
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import argparse
 import base64
 import configparser
@@ -15,6 +37,38 @@ import unicodedata
 from bs4 import BeautifulSoup, Comment
 import requests
 import xxhash
+
+
+# https://stackoverflow.com/a/34325723
+def print_progress_bar(
+    iteration,
+    total,
+    prefix="",
+    suffix="",
+    decimals=1,
+    length=100,
+    fill="█",
+    printEnd="\r",
+):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + "-" * (length - filledLength)
+    print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=printEnd)
+    # Print New Line on Complete
+    if iteration == total:
+        print()
 
 
 def oxfordcomma(titles):
@@ -98,7 +152,7 @@ def add_spoiler_field(csv_file_arg, dry_run):
         all.append(row)
 
     if dry_run:
-        print(f"Dry run: would write {len(all)} rows")
+        print(f"DRY RUN: would write {len(all)} rows")
     else:
         writer.writerows(all)
 
@@ -131,15 +185,15 @@ def find_wp_api_url(wp_base_url):
 
 def clean_wp_post_option(option_string):
     option_string.replace(" ", "")
-    
+
     # Have a hairy regexp
     #    ^            anchors at the start of the string
     #    (\d+,{0,1})  any number of digits, optionally followed by a comma
-    #    *            the previous group can appear zero or more times 
+    #    *            the previous group can appear zero or more times
     #                     this won't match an ID by itself, but the next bit will
     #    \d+          any number of digits
     #    $            anchors at the end of the string
-    
+
     if re.search("^(\d+,{0,1})+\d+$", option_string):
         return option_string
     else:
@@ -156,7 +210,7 @@ def find_wp_post(config, post_title):
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
-    print(f"Searching for {post_title}")
+    print(f"searching for {post_title}")
     search_payload = {
         "search": post_title,
         "_fields": "title,id",
@@ -168,7 +222,7 @@ def find_wp_post(config, post_title):
         for result in response.json():
             if result["title"] == post_title:
                 post_id = result["id"]
-                print(f"\tFound (post id: {post_id})")
+                print(f"found {post_id}")
 
         if "next" in response.links:
             search_payload["page"] = search_payload["page"] + 1
@@ -180,7 +234,7 @@ def find_wp_post(config, post_title):
 
 def write_movie_to_db(db_cur, movie, dry_run):
     if dry_run:
-        print(f"Dry run: would write {movie['title']} to database.")
+        print(f"DRY RUN: would write {movie['title']} to database.")
     else:
         print(f"Writing {movie['title']} to database.")
         pub_ts = datetime.fromtimestamp(time.mktime(movie["timestamp"]))
@@ -222,13 +276,14 @@ def write_movies_to_db(config, movies, dry_run):
 
 
 def fetch_lb_rss(user):
+    reviews = []
+
     try:
         lb_feed = feedparser.parse(f"https://letterboxd.com/{user}/rss/")
     except:
         print("Couldn't get/parse RSS feed for {user}")
-        return
+        return reviews
 
-    reviews = []
     for movie in lb_feed.entries:
         if "letterboxd-review-" in movie["guid"]:
             # Weak parse for spoilers but this is as good as it gets
@@ -262,18 +317,37 @@ def fetch_lb_rss(user):
 
 
 def fetch_lb_csv(csv_file_arg):
+    reviews = []
+
     try:
         csv_file = open(csv_file_arg)
     except:
-        print(f"{csv_file_arg} not found")
-        return
+        print(f"ERROR: {csv_file_arg} not found")
+        return reviews
 
-    reviews = []
+    # print_progress_bar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r")
     reader = csv.DictReader(csv_file)
-    for row in reader:
+    # Building an array because we need total count for a progress bar
+    movies = [l for l in reader]
+
+    bar_prefix = "Movies:"
+    bar_suffix = "Complete"
+    bar_length = 50
+    bar_total_count = len(movies)
+    bar_current = 0
+
+    print_progress_bar(
+        bar_current,
+        bar_total_count,
+        prefix=bar_prefix,
+        suffix=bar_suffix,
+        length=bar_length,
+    )
+
+    for row in movies:
         # CSV exports are Unicode text w/embedded HTML tags
         # We first add <p> tags and clean up Unicode, then drop <br/> tags in
-        # Plan is to add spoiler tags when writing to WP, since that's where they
+        # We add spoiler tags when writing to WP, since that's where they
         # make sense in context
         parsed_review = "".join(
             map(
@@ -316,6 +390,15 @@ def fetch_lb_csv(csv_file_arg):
             }
         )
 
+        bar_current = bar_current + 1
+        print_progress_bar(
+            bar_current,
+            bar_total_count,
+            prefix=bar_prefix,
+            suffix=bar_suffix,
+            length=bar_length,
+        )
+
     return reviews
 
 
@@ -327,7 +410,7 @@ def wp_post(config, post, dry_run, post_id=False):
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     if dry_run:
-        print(f"\tDRY RUN: no changes made to WordPress")
+        print(f"DRY RUN: writing or updating post to WordPress.")
     else:
         if post_id:
             response = requests.post(
@@ -439,13 +522,24 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                 "status": "publish",
             }
 
-            existing_post_id = find_wp_post(config, post_title)
-            if existing_post_id:
-                print(f"Updating {post_title} (post id: {existing_post_id})")
+            search_payload = {"search": post_title}
+            response = requests.get(wp_search_api, params=search_payload)
+            if not response.json():
+                if dry_run:
+                    print(f"DRY RUN: not posting {post_title}")
+                else:
+                    print(f"posting {post_title}")
+                    wp_post(config, post, dry_run)
             else:
-                print(f"Posting {post_title}")
-                
-            wp_post(config, post, dry_run, post_id=existing_post_id)
+                if dry_run:
+                    print(f"DRY RUN: not updating {post_title}")
+                else:
+                    print(f"updating {post_title}")
+                    # For fuck's sake clean this up
+                    post_response = requests.get(
+                        f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
+                    )
+                    wp_post(config, post, dry_run, post_id=post_response.json()["id"])
 
     return True
 
@@ -478,6 +572,8 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
         ([start_datetime, end_datetime]),
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
+        print(post_title)
+        existing_post_id = find_wp_post(config, post_title)
 
         post_html = BeautifulSoup(movie[3], "html.parser")
         post_date = datetime.isoformat(movie[1])
@@ -500,14 +596,12 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
             "status": "publish",
         }
 
-        existing_post_id = find_wp_post(config, post_title)
-
-        if existing_post_id:
-            print(f"Updating {post_title} (post id: {existing_post_id})")
+        if dry_run:
+            print(f"DRY RUN: not posting {movie[0]}")
+            print(str(post_html))
         else:
-            print(f"Posting {post_title}")
-
-        wp_post(config, post, dry_run, post_id=existing_post_id)
+            print(f"Posting {movie[0]}")
+            wp_post(config, post, dry_run, post_id=existing_post_id)
 
 
 def main():
