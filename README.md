@@ -18,8 +18,15 @@ Requirements:
 - [BBSpoiler plugin](https://wordpress.org/plugins/bbspoiler/)
 
 You could probably use another spoiler plugin, but might need to edit
-this script's 
-code.
+this script's code.
+
+This script currently uses [cite] shortcodes for movie titles in the
+weekly aggregate review posts, and that shortcode only works on, um, 
+my personal WordPress installation. I have opened an issue to fix that.
+
+This is kind of more trouble than I expect anyone will want to go to,
+but if you want to install my cite tag plugin, I stuck the code in 
+`./wordpress/shortcite.php`.
 
 ### Application Password
 
