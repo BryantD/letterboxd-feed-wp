@@ -516,7 +516,6 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
             else:
                 title_list_p.append(BeautifulSoup(title_str, "html.parser"))
             post_html.find().insert_before(title_list_p)
-            print(post_html)
 
             more_p = post_html.new_tag("p")
             more_p.string = Comment("more")
