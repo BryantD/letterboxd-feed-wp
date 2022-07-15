@@ -20,14 +20,6 @@ Requirements:
 You could probably use another spoiler plugin, but might need to edit
 this script's code.
 
-This script currently uses [cite] shortcodes for movie titles in the
-weekly aggregate review posts, and that shortcode only works on, um, 
-my personal WordPress installation. I have opened an issue to fix that.
-
-This is kind of more trouble than I expect anyone will want to go to,
-but if you want to install my cite tag plugin, I stuck the code in 
-`./wordpress/shortcite.php`.
-
 ### Application Password
 
 Head on over to your WordPress [user
@@ -97,8 +89,12 @@ out. Otherwise, remember to uncomment them.
 - `italic`: wrap movie titles in <i> tags when making weekly posts
 - `cite`: wrap movie titles in the [cite] shortcode when making weekly posts
 
-The [cite] shortcode only works if you've made a custom plugin for your WordPress 
-installation, which I've done but you probably haven't.
+The [cite] shortcode only works if you've made a custom plugin for your WordPress
+installation, which I've done but you probably haven't. This is kind of
+more trouble than I expect anyone will want to go to, but if you want to
+install my cite tag plugin, I stuck the code in
+`./wordpress/shortcite.php`.
+
 
 ### SQLite Database
 
