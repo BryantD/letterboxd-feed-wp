@@ -92,6 +92,14 @@ out. Otherwise, remember to uncomment them.
 `db_name` should be the filename of your SQLite database. It defaults to 
 `lb_feed.sqlite`.
 
+`cite` should probably be left alone. There are two options: `italic` or `cite`:
+
+- `italic`: wrap movie titles in <i> tags when making weekly posts
+- `cite`: wrap movie titles in the [cite] shortcode when making weekly posts
+
+The [cite] shortcode only works if you've made a custom plugin for your WordPress 
+installation, which I've done but you probably haven't.
+
 ### SQLite Database
 
 Set up your SQL database as follows:
