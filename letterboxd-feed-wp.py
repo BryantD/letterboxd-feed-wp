@@ -431,6 +431,13 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
+    
+    if config["wp"]["cite"] == "cite":
+        cite_start = "[cite]"
+        cite_end = "[/cite]"
+    else:
+        cite_start = "<i>"
+        cite_end = "</i>"
 
     movie_list = {}
     date_fmt = "%-m/%-d/%Y"  # UNIX only, will fail under Windows
@@ -477,7 +484,7 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
                 movie_year = int(movie[4])
 
                 review_title = title_string(movie_title, movie_year, movie[5])
-                title_list.append(f"[cite]{movie_title}[/cite]")
+                title_list.append(f"{cite_start}{movie_title}{cite_end}")
 
                 movie_review_html = BeautifulSoup(movie[3], "html.parser")
 
@@ -500,10 +507,14 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
             # Add paragraphs for the <!-- more --> marker and title list
             # foo.find() provides the first tag in the document
 
-            title_list_p = post_html.new_tag("p")
-            title_list_p.string = (
+            title_str = (
                 f"Movies reviewed this week: {oxfordcomma(title_list)}."
             )
+            title_list_p = post_html.new_tag("p")
+            if config["wp"]["cite"] == "cite":
+                title_list_p.string = title_str
+            else:
+                title_list_p.append(BeautifulSoup(title_str, "html.parser"))
             post_html.find().insert_before(title_list_p)
 
             more_p = post_html.new_tag("p")
@@ -667,9 +678,11 @@ def main():
     if option_missing:
         sys.exit()
 
-    # Check for config options that can be absent
+    # Check for config options that can be absent; maybe make this fallbacks later
     if not config.has_option("local", "db_name"):
         config["local"]["db_name"] = "lb_feed.sqlite"
+    if not config.has_option("wp", "cite"):
+        config["wp"]["cite"] = "italic"
 
     for wp_post_option in ["post_categories", "post_tags"]:
         if config.has_option("wp", wp_post_option):
