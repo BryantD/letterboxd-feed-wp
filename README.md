@@ -174,6 +174,10 @@ away behind a More block.
 
 ![Sample weekly post (post view)](images/weekly-post-02.png)
 
+If you use `writeweeks` in conjunction with the `-start-date` or 
+`--end-date` option, the dates will be adjusted to end of week boundaries
+instead of creating a partial week post.
+
 `addspoilers`: adds a spoiler column to a Letterboxd CSV export. By
 default, this option will look for a file named `reviews.csv`, but you
 can specify another file with the `--csv` option. It writes to stdout.
