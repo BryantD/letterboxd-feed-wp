@@ -26,7 +26,7 @@ import argparse
 import base64
 import configparser
 import csv
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import feedparser
 import re
 import sqlite3
@@ -647,8 +647,8 @@ def main():
         "--start-date",
         action="store",
         type=date.fromisoformat,
-        default="1970-01-01",
-        help="Start date for posts in YYYY-MM-DD format (defaults to 1970-01-01)",
+        default="1970-01-05",
+        help="Start date for posts in YYYY-MM-DD format (defaults to 1970-01-05)",
     )
     parser.add_argument(
         "--end-date",
@@ -706,6 +706,17 @@ def main():
     elif args.action == "write":
         write_movies_to_wp(config, args.dry_run, args.start_date, args.end_date)
     elif args.action == "writeweeks":
+        # Move the --start-date and --end-date parameters to full weeks
+        if args.start_date.isoweekday() != 1:
+            args.start_date = args.start_date - timedelta(
+                days=args.start_date.isoweekday() - 1
+            )
+            print(f"Adjusting --start-date to a Monday ({args.start_date})")
+        if args.end_date.isoweekday() != 7:
+            args.end_date = args.end_date + timedelta(
+                days=7 - args.end_date.isoweekday()
+            )
+            print(f"Adjusting --end-date to a Sunday ({args.end_date})")
         write_movies_to_wp_by_week(config, args.dry_run, args.start_date, args.end_date)
     elif args.action == "addspoilers":
         add_spoiler_field(args.csv, args.dry_run)
