@@ -305,7 +305,7 @@ def fetch_lb_rss(user):
                     "title": movie.letterboxd_filmtitle,
                     "link": movie.links[0]["href"],
                     "id": movie.id,
-                    "timestamp": movie.published_parsed,
+                    "timestamp": timestamp,
                     "review": str(clean_review),
                     "year": movie.letterboxd_filmyear,
                     "rating": movie.letterboxd_memberrating,
