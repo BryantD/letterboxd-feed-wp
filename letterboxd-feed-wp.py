@@ -423,6 +423,80 @@ def wp_post(config, post, dry_run, post_id=False):
             response = requests.post(wp_post_api, headers=wp_headers, json=post)
 
 
+def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime):
+
+    if config["wp"]["cite"] == "cite":
+        cite_start = "[cite]"
+        cite_end = "[/cite]"
+    else:
+        cite_start = "<i>"
+        cite_end = "</i>"
+
+    date_fmt = "%-m/%-d/%Y"  # UNIX only, will fail under Windows
+
+    title_list = []
+    post_html = BeautifulSoup("", "html.parser")
+
+    # Build the main body of the post
+    for movie in movie_list:
+        movie_title = movie[0]
+        movie_year = int(movie[4])
+
+        review_title = title_string(movie_title, movie_year, movie[5])
+        title_list.append(f"{cite_start}{movie_title}{cite_end}")
+
+        movie_review_html = BeautifulSoup(movie[3], "html.parser")
+
+        # I could use foo.find() here instead of foo.find_all()[0]
+        # but I felt like staying consistent with the end append
+        if movie[6]:
+            movie_review_html.find_all()[0].insert(0, "[spoiler]")
+            movie_review_html.find_all()[-1].append("[/spoiler]")
+
+        # Build the header elements -- the timestamps here are the date watched
+        h2_html = movie_review_html.new_tag("h2")
+        h2_html.string = (
+            f"{movie[1].month}/{movie[1].day}/{movie[1].year}: {review_title}"
+        )
+        movie_review_html.find_all()[0].insert_before(h2_html)
+
+        # Copy movie_review_html onto the end of post_html
+        post_html.append(movie_review_html)
+
+    # Build the rest of the post
+    post_title = f"Movie Reviews: {week_start_datetime.strftime(date_fmt)} to {week_end_datetime.strftime(date_fmt)}"
+
+    # Add paragraphs for the <!-- more --> marker and title list
+    # foo.find() provides the first tag in the document
+    title_str = f"Movies reviewed this week: {oxfordcomma(title_list)}."
+    title_list_p = post_html.new_tag("p")
+    if config["wp"]["cite"] == "cite":
+        title_list_p.string = title_str
+    else:
+        title_list_p.append(BeautifulSoup(title_str, "html.parser"))
+    post_html.find().insert_before(title_list_p)
+
+    more_p = post_html.new_tag("p")
+    more_p.string = Comment("more")
+    post_html.find("p").insert_after(more_p)
+
+    post_date = datetime.isoformat(
+        datetime(week_end_datetime.year, week_end_datetime.month, week_end_datetime.day)
+    )
+
+    post = {
+        "title": post_title,
+        "movies": title_list,   # For convenience
+        "date": post_date,
+        "content": str(post_html),
+        "categories": config["wp"]["post_categories"],
+        "tags": config["wp"]["post_tags"],
+        "status": "publish",
+    }
+
+    return post
+
+
 def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     db_name = config["local"]["db_name"]
 
@@ -431,16 +505,14 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
     wp_token = base64.b64encode(wp_credentials.encode())
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
-    
-    if config["wp"]["cite"] == "cite":
-        cite_start = "[cite]"
-        cite_end = "[/cite]"
-    else:
-        cite_start = "<i>"
-        cite_end = "</i>"
 
-    movie_list = {}
-    date_fmt = "%-m/%-d/%Y"  # UNIX only, will fail under Windows
+    # Convert date objects to beginning or end of day datetimes, as appropriate
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    week_start_datetime = start_datetime
+    week_end_datetime = start_datetime + timedelta(days=6)
+
+    movie_list = []
 
     try:
         db_conn = sqlite3.connect(
@@ -450,107 +522,40 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
         print("Error connecting to db {db_name}")
         return False
 
-    # Convert date objects to beginning or end of day datetimes, as appropriate
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-    end_datetime = datetime.combine(end_date, datetime.max.time())
-
     db_cur = db_conn.cursor()
 
-    for movie in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
-        ([start_datetime, end_datetime]),
-    ):
-        year = movie[1].year
-        week = movie[1].isocalendar().week
-        if year not in movie_list:
-            movie_list[year] = {}
-        if week not in movie_list[year]:
-            movie_list[year][week] = []
-        movie_list[year][week].append(movie)
+    while week_end_datetime <= end_datetime:
+        for movie in db_cur.execute(
+            "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+            (week_start_datetime, week_end_datetime),
+        ):
+            movie_list.append(movie)
 
-    for year in movie_list:
-        for week in movie_list[year]:
-            # Title & date material
-            title_list = []
-            start_date = date.fromisocalendar(year, week, 1)
-            end_date = date.fromisocalendar(year, week, 7)
-            post_title = f"Movie Reviews: {start_date.strftime(date_fmt)} to {end_date.strftime(date_fmt)}"
+        post = build_weekly_post(
+            config, movie_list, week_start_datetime, week_end_datetime
+        )
 
-            # Build the post movie by movie
-            post_html = BeautifulSoup("", "html.parser")
+        search_payload = {"search": post["title"]}
+        response = requests.get(wp_search_api, params=search_payload)
 
-            for movie in movie_list[year][week]:
-                movie_title = movie[0]
-                movie_year = int(movie[4])
-
-                review_title = title_string(movie_title, movie_year, movie[5])
-                title_list.append(f"{cite_start}{movie_title}{cite_end}")
-
-                movie_review_html = BeautifulSoup(movie[3], "html.parser")
-
-                # Note: I could use foo.find() here instead of foo.find_all()[0]
-                # but I felt like staying consistent with the end append
-                if movie[6]:
-                    movie_review_html.find_all()[0].insert(0, "[spoiler]")
-                    movie_review_html.find_all()[-1].append("[/spoiler]")
-
-                # Build the header elements -- the timestamps here are date watched
-                h2_html = movie_review_html.new_tag("h2")
-                h2_html.string = (
-                    f"{movie[1].month}/{movie[1].day}/{movie[1].year}: {review_title}"
-                )
-                movie_review_html.find_all()[0].insert_before(h2_html)
-
-                # Copy movie_review_html onto the end of post_html
-                post_html.append(movie_review_html)
-
-            # Add paragraphs for the <!-- more --> marker and title list
-            # foo.find() provides the first tag in the document
-
-            title_str = (
-                f"Movies reviewed this week: {oxfordcomma(title_list)}."
-            )
-            title_list_p = post_html.new_tag("p")
-            if config["wp"]["cite"] == "cite":
-                title_list_p.string = title_str
+        if not response.json():
+            if dry_run:
+                print(f"DRY RUN: not posting {post['title']}")
+                print(f"DRY RUN: {', '.join(post['movies'])}")
             else:
-                title_list_p.append(BeautifulSoup(title_str, "html.parser"))
-            post_html.find().insert_before(title_list_p)
-
-            more_p = post_html.new_tag("p")
-            more_p.string = Comment("more")
-            post_html.find("p").insert_after(more_p)
-
-            post_date = datetime.isoformat(
-                datetime(end_date.year, end_date.month, end_date.day)
-            )
-            post = {
-                "title": post_title,
-                "date": post_date,
-                "content": str(post_html),
-                "categories": config["wp"]["post_categories"],
-                "tags": config["wp"]["post_tags"],
-                "status": "publish",
-            }
-
-            search_payload = {"search": post_title}
-            response = requests.get(wp_search_api, params=search_payload)
-            if not response.json():
-                if dry_run:
-                    print(f"DRY RUN: not posting {post_title}")
-                else:
-                    print(f"posting {post_title}")
-                    wp_post(config, post, dry_run)
+                print(f"posting {post['title']}")
+                wp_post(config, post, dry_run)
+        else:
+            if dry_run:
+                print(f"DRY RUN: not updating {post['title']}")
+                print(f"DRY RUN: {', '.join(post['movies'])}")
             else:
-                if dry_run:
-                    print(f"DRY RUN: not updating {post_title}")
-                else:
-                    print(f"updating {post_title}")
-                    # For fuck's sake clean this up
-                    post_response = requests.get(
-                        f"{config['wp']['wp_url']}/wp-json/wp/v2/posts/{response.json()[0]['id']}"
-                    )
-                    wp_post(config, post, dry_run, post_id=post_response.json()["id"])
+                print(f"updating {post['title']}")
+                wp_post(config, post, dry_run, post_id=response.json()["id"])
+
+        week_start_datetime = week_start_datetime + timedelta(days=7)
+        week_end_datetime = week_end_datetime + timedelta(days=7)
+        movie_list = []
 
     return True
 
