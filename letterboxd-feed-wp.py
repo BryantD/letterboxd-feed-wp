@@ -424,7 +424,6 @@ def wp_post(config, post, dry_run, post_id=False):
 
 
 def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime):
-
     if config["wp"]["cite"] == "cite":
         cite_start = "[cite]"
         cite_end = "[/cite]"
@@ -480,9 +479,14 @@ def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime
     more_p.string = Comment("more")
     post_html.find("p").insert_after(more_p)
 
-    post_date = datetime.isoformat(
-        datetime(week_end_datetime.year, week_end_datetime.month, week_end_datetime.day)
-    )
+    # This could be more succinct but I would rather be clear
+        
+    if week_end_datetime > datetime.today():
+        post_date = datetime.isoformat(datetime.today())
+    else:
+        post_date = datetime.isoformat(
+            datetime(week_end_datetime.year, week_end_datetime.month, week_end_datetime.day)
+        )
 
     post = {
         "title": post_title,
@@ -531,27 +535,28 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
         ):
             movie_list.append(movie)
 
-        post = build_weekly_post(
-            config, movie_list, week_start_datetime, week_end_datetime
-        )
+        if (movie_list):
+            post = build_weekly_post(
+                config, movie_list, week_start_datetime, week_end_datetime
+            )
 
-        search_payload = {"search": post["title"]}
-        response = requests.get(wp_search_api, params=search_payload)
+            search_payload = {"search": post["title"]}
+            response = requests.get(wp_search_api, params=search_payload)
 
-        if not response.json():
-            if dry_run:
-                print(f"DRY RUN: not posting post {post['title']}")
-                print(f"DRY RUN: {', '.join(post['movies'])}")
+            if not response.json():
+                if dry_run:
+                    print(f"DRY RUN: not posting post {post['title']}")
+                    print(f"DRY RUN: {', '.join(post['movies'])}")
+                else:
+                    print(f"Posting post {post['title']}")
+                    wp_post(config, post, dry_run)
             else:
-                print(f"Posting post {post['title']}")
-                wp_post(config, post, dry_run)
-        else:
-            if dry_run:
-                print(f"DRY RUN: not updating post {post['title']}")
-                print(f"DRY RUN: {', '.join(post['movies'])}")
-            else:
-                print(f"Updating post {post['title']}")
-                wp_post(config, post, dry_run, post_id=response.json()[0]["id"])
+                if dry_run:
+                    print(f"DRY RUN: not updating post {post['title']}")
+                    print(f"DRY RUN: {', '.join(post['movies'])}")
+                else:
+                    print(f"Updating post {post['title']}")
+                    wp_post(config, post, dry_run, post_id=response.json()[0]["id"])
 
         week_start_datetime = week_start_datetime + timedelta(days=7)
         week_end_datetime = week_end_datetime + timedelta(days=7)
