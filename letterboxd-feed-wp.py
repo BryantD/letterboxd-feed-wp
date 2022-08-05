@@ -540,18 +540,18 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
 
         if not response.json():
             if dry_run:
-                print(f"DRY RUN: not posting {post['title']}")
+                print(f"DRY RUN: not posting post {post['title']}")
                 print(f"DRY RUN: {', '.join(post['movies'])}")
             else:
-                print(f"posting {post['title']}")
+                print(f"Posting post {post['title']}")
                 wp_post(config, post, dry_run)
         else:
             if dry_run:
-                print(f"DRY RUN: not updating {post['title']}")
+                print(f"DRY RUN: not updating post {post['title']}")
                 print(f"DRY RUN: {', '.join(post['movies'])}")
             else:
-                print(f"updating {post['title']}")
-                wp_post(config, post, dry_run, post_id=response.json()["id"])
+                print(f"Updating post {post['title']}")
+                wp_post(config, post, dry_run, post_id=response.json()[0]["id"])
 
         week_start_datetime = week_start_datetime + timedelta(days=7)
         week_end_datetime = week_end_datetime + timedelta(days=7)
