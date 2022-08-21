@@ -97,9 +97,7 @@ def clean_rss_review_html(review, spoiler_flag):
     clean_review = unicodedata.normalize("NFKD", review)
     review_html = BeautifulSoup(clean_review, "html.parser")
 
-    img_p = review_html.find("img", src=re.compile("\/film-poster\/|ltrbxd\.com"))
-    if img_p:
-        img_p.parent.extract()
+    review_html = clean_poster(review_html)
 
     if spoiler_flag:
         spoiler = review_html.find(
@@ -111,13 +109,11 @@ def clean_rss_review_html(review, spoiler_flag):
     return review_html
 
 
-def clean_poster(review):
-    review_html = BeautifulSoup(review, "html.parser")
-
+def clean_poster(review_html):
     img_p = review_html.find("img", src=re.compile("\/film-poster\/|ltrbxd\.com"))
     if img_p:
         img_p.parent.extract()
-        
+
     return review_html
 
 
@@ -140,6 +136,45 @@ def spoiler_check(lb_url):
     time.sleep(5)
 
     return spoiler_flag
+
+
+def clean_database(config, dry_run):
+    # Intended as an all purpose respository for database cleanup routines
+    # Currently includes:
+    #   - removing poster images
+
+    if dry_run:
+        dry_run_output = "DRY RUN: "
+    else:
+        dry_run_output = ""
+
+    db_name = config["local"]["db_name"]
+    try:
+        db_conn = sqlite3.connect(db_name)
+    except:
+        print("Error connecting to db {db_name}")
+        return
+
+    db_conn.row_factory = sqlite3.Row
+    db_cur = db_conn.cursor()
+
+    db_cur.execute(
+        "SELECT id, title, review FROM lb_feed WHERE review like '%img src%'",
+    )
+    movies = db_cur.fetchall()
+    for movie in movies:
+        print(f"{dry_run_output}Updating review for {movie['title']}")
+
+        review_html = BeautifulSoup(movie["review"], "html.parser")
+        review_html = clean_poster(review_html)
+
+        if not dry_run:
+            db_cur.execute(
+                "UPDATE lb_feed SET review = ? WHERE id = ?",
+                (str(review_html), movie["id"]),
+            )
+
+    db_cur.close()
 
 
 def add_spoiler_field(csv_file_arg, dry_run):
@@ -307,7 +342,7 @@ def fetch_lb_rss(user):
                 timestamp = time.strptime(movie.letterboxd_watcheddate, "%Y-%m-%d")
             else:
                 timestamp = movie.published_parsed
-                
+
             # Handle null ratings
             if movie.letterboxd_memberrating:
                 rating = movie.letterboxd_memberrating
@@ -496,17 +531,19 @@ def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime
     post_html.find("p").insert_after(more_p)
 
     # This could be more succinct but I would rather be clear
-        
+
     if week_end_datetime > datetime.today():
         post_date = datetime.isoformat(datetime.today())
     else:
         post_date = datetime.isoformat(
-            datetime(week_end_datetime.year, week_end_datetime.month, week_end_datetime.day)
+            datetime(
+                week_end_datetime.year, week_end_datetime.month, week_end_datetime.day
+            )
         )
 
     post = {
         "title": post_title,
-        "movies": title_list,   # For convenience
+        "movies": title_list,  # For convenience
         "date": post_date,
         "content": str(post_html),
         "categories": config["wp"]["post_categories"],
@@ -551,7 +588,7 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
         ):
             movie_list.append(movie)
 
-        if (movie_list):
+        if movie_list:
             post = build_weekly_post(
                 config, movie_list, week_start_datetime, week_end_datetime
             )
@@ -647,7 +684,14 @@ def main():
     parser.add_argument(
         "action",
         help="Action for the script to take",
-        choices=["fetchrss", "fetchcsv", "write", "writeweeks", "addspoilers"],
+        choices=[
+            "fetchrss",
+            "fetchcsv",
+            "write",
+            "writeweeks",
+            "cleandb",
+            "addspoilers",
+        ],
     )
 
     parser.add_argument(
@@ -744,6 +788,8 @@ def main():
             )
             print(f"Adjusting --end-date to a Sunday ({args.end_date})")
         write_movies_to_wp_by_week(config, args.dry_run, args.start_date, args.end_date)
+    elif args.action == "cleandb":
+        clean_database(config, args.dry_run)
     elif args.action == "addspoilers":
         add_spoiler_field(args.csv, args.dry_run)
 
