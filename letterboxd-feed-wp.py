@@ -126,7 +126,10 @@ def spoiler_check(lb_url):
     html = BeautifulSoup(review.text, "html.parser")
     if html.find(
         "meta",
-        content="This review may contain spoilers. Visit the page to bypass this warning and read the review.",
+        content=(
+            "This review may contain spoilers. "
+            "Visit the page to bypass this warning and read the review."
+        ),
     ):
         spoiler_flag = 1
     else:
@@ -151,8 +154,8 @@ def clean_database(config, dry_run):
     db_name = config["local"]["db_name"]
     try:
         db_conn = sqlite3.connect(db_name)
-    except:
-        print("Error connecting to db {db_name}")
+    except sqlite3.Error as error:
+        print(f"Error connecting to db {db_name}: {error}")
         return
 
     db_conn.row_factory = sqlite3.Row
@@ -181,8 +184,8 @@ def clean_database(config, dry_run):
 def add_spoiler_field(csv_file_arg, dry_run):
     try:
         csv_file = open(csv_file_arg)
-    except:
-        print(f"{csv_file_arg} not found")
+    except OSError as error:
+        print(f"ERROR: {csv_file_arg} couldn't be opened for reading: {error}")
         return
 
     reader = csv.reader(csv_file)
@@ -282,8 +285,12 @@ def write_movie_to_db(db_cur, movie, dry_run):
         print(f"Writing {movie['title']} to database.")
         pub_ts = datetime.fromtimestamp(time.mktime(movie["timestamp"]))
         try:
+            sql = (
+                "INSERT INTO lb_feed VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(title, year) DO NOTHING"
+            )
             db_cur.execute(
-                "INSERT INTO lb_feed VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(title, year) DO NOTHING",
+                sql,
                 (
                     movie["id"],
                     movie["title"],
@@ -297,8 +304,8 @@ def write_movie_to_db(db_cur, movie, dry_run):
             )
             db_cur.connection.commit()
             return True
-        except sqlite3.Error as e:
-            print(f"ERROR: couldn't write {movie['title']}: {e}")
+        except sqlite3.Error as error:
+            print(f"ERROR: couldn't write {movie['title']}: {error}")
             return False
 
 
@@ -306,8 +313,8 @@ def write_movies_to_db(config, movies, dry_run):
     db_name = config["local"]["db_name"]
     try:
         db_conn = sqlite3.connect(db_name)
-    except:
-        print("Error connecting to db {db_name}")
+    except sqlite3.Error as error:
+        print(f"Error connecting to db {db_name}: {error}")
         return
 
     db_cur = db_conn.cursor()
@@ -321,10 +328,9 @@ def write_movies_to_db(config, movies, dry_run):
 def fetch_lb_rss(user):
     reviews = []
 
-    try:
-        lb_feed = feedparser.parse(f"https://letterboxd.com/{user}/rss/")
-    except:
-        print("Couldn't get/parse RSS feed for {user}")
+    lb_feed = feedparser.parse(f"https://letterboxd.com/{user}/rss/")
+    if lb_feed.bozo:
+        print(f"Couldn't get/parse RSS feed for {user}: {lb_feed.bozo_exception}")
         return reviews
 
     for movie in lb_feed.entries:
@@ -370,11 +376,10 @@ def fetch_lb_csv(csv_file_arg):
 
     try:
         csv_file = open(csv_file_arg)
-    except:
-        print(f"ERROR: {csv_file_arg} not found")
+    except OSError as error:
+        print(f"ERROR: {csv_file_arg} couldn't be opened for reading: {error}")
         return reviews
 
-    # print_progress_bar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r")
     reader = csv.DictReader(csv_file)
     # Building an array because we need total count for a progress bar
     movies = [line for line in reader]
@@ -461,15 +466,25 @@ def wp_post(config, post, dry_run, post_id=False):
     if dry_run:
         print("DRY RUN: writing or updating post to WordPress.")
     else:
+        # I was gonna hash the content and compare before updating but WP returns
+        # the content as rendered, which is different than the content as sent,
+        # so screw it
         if post_id:
-            response = requests.post(
-                f"{wp_post_api}/{post_id}", headers=wp_headers, json=post
-            )
-            # I was gonna hash the content and compare before updating but WP returns the
-            # content as rendered, which is different than the content as sent, so screw it
-
+            try:
+                response = requests.post(
+                    f"{wp_post_api}/{post_id}", headers=wp_headers, json=post
+                )
+            except requests.exceptions as error:
+                print(f"ERROR: post failed: {error}")
+            if response.status_code != requests.codes.ok:
+                print(f"ERROR: post failed w/status code {response.status_code}")
         else:
-            response = requests.post(wp_post_api, headers=wp_headers, json=post)
+            try:
+                response = requests.post(wp_post_api, headers=wp_headers, json=post)
+            except requests.exceptions as error:
+                print(f"ERROR: post failed: {error}")
+            if response.status_code != requests.codes.ok:
+                print(f"ERROR: post failed w/status code {response.status_code}")
 
 
 def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime):
@@ -512,7 +527,10 @@ def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime
         post_html.append(movie_review_html)
 
     # Build the rest of the post
-    post_title = f"Movie Reviews: {week_start_datetime.strftime(date_fmt)} to {week_end_datetime.strftime(date_fmt)}"
+    post_title = (
+        f"Movie Reviews: {week_start_datetime.strftime(date_fmt)} "
+        f"to {week_end_datetime.strftime(date_fmt)}"
+    )
 
     # Add paragraphs for the <!-- more --> marker and title list
     # foo.find() provides the first tag in the document
@@ -570,15 +588,19 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
         db_conn = sqlite3.connect(
             db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
         )
-    except:
-        print("Error connecting to db {db_name}")
+    except sqlite3.Error as error:
+        print(f"Error connecting to db {db_name}: {error}")
         return False
 
     db_cur = db_conn.cursor()
 
     while week_end_datetime <= end_datetime:
+        sql = (
+            "SELECT title, ts [timestamp], link, review, year, rating, spoilers "
+            "FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC"
+        )
         for movie in db_cur.execute(
-            "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+            sql,
             (week_start_datetime, week_end_datetime),
         ):
             movie_list.append(movie)
@@ -620,8 +642,8 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
         db_conn = sqlite3.connect(
             db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
         )
-    except:
-        print("Error connecting to db {db_name}")
+    except sqlite3.Error as error:
+        print(f"Error connecting to db {db_name}: {error}")
         return
 
     # Convert date objects to beginning or end of day datetimes, as appropriate
@@ -630,8 +652,13 @@ def write_movies_to_wp(config, dry_run, start_date, end_date):
 
     db_cur = db_conn.cursor()
 
+    sql = (
+        "SELECT title, ts [timestamp], link, review, year, rating, spoilers "
+        "FROM lb_feed "
+        "WHERE ts >= ? AND ts <= ? ORDER BY ts ASC"
+    )
     for movie in db_cur.execute(
-        "SELECT title, ts [timestamp], link, review, year, rating, spoilers FROM lb_feed WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+        sql,
         ([start_datetime, end_datetime]),
     ):
         post_title = title_string(movie[0], movie[4], movie[5])
@@ -750,7 +777,8 @@ def main():
                 config["wp"][wp_post_option] = clean_option_string
             else:
                 print(
-                    f"ERROR: {wp_post_option} should be a comma separated list of digits, but is \"{config['wp'][wp_post_option]}\""
+                    f"ERROR: {wp_post_option} should be a comma separated list of "
+                    f"digits, but is \"{config['wp'][wp_post_option]}\""
                 )
                 sys.exit()
         else:
