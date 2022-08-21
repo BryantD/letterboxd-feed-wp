@@ -97,7 +97,7 @@ def clean_rss_review_html(review, spoiler_flag):
     clean_review = unicodedata.normalize("NFKD", review)
     review_html = BeautifulSoup(clean_review, "html.parser")
 
-    img_p = review_html.find("img", src=re.compile("\/film-poster\/"))
+    img_p = review_html.find("img", src=re.compile("\/film-poster\/|ltrbxd\.com"))
     if img_p:
         img_p.parent.extract()
 
@@ -108,6 +108,16 @@ def clean_rss_review_html(review, spoiler_flag):
         spoiler_p = spoiler.parent
         spoiler_p.extract()
 
+    return review_html
+
+
+def clean_poster(review):
+    review_html = BeautifulSoup(review, "html.parser")
+
+    img_p = review_html.find("img", src=re.compile("\/film-poster\/|ltrbxd\.com"))
+    if img_p:
+        img_p.parent.extract()
+        
     return review_html
 
 
