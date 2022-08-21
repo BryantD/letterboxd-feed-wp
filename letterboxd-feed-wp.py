@@ -110,7 +110,7 @@ def clean_rss_review_html(review, spoiler_flag):
 
 
 def clean_poster(review_html):
-    img_p = review_html.find("img", src=re.compile("\/film-poster\/|ltrbxd\.com"))
+    img_p = review_html.find("img", src=re.compile(r"\/film-poster\/|ltrbxd\.com"))
     if img_p:
         img_p.parent.extract()
 
@@ -222,9 +222,9 @@ def find_wp_api_url(wp_base_url):
         print(f"ERROR: couldn't get WP API URIL{wp_api_url}: {e}")
         return False
 
-    if not "wp/v2" in response.json()["namespaces"]:
-        print(f"ERROR: WP installation doesn't appear to support the v2 API")
-        print(f"ERROR: Are you running version 4.7+?")
+    if "wp/v2" not in response.json()["namespaces"]:
+        print("ERROR: WP installation doesn't appear to support the v2 API")
+        print("ERROR: Are you running version 4.7+?")
 
     return wp_api_url
 
@@ -240,7 +240,7 @@ def clean_wp_post_option(option_string):
     #    \d+          any number of digits
     #    $            anchors at the end of the string
 
-    if re.search("^(\d+,{0,1})+\d+$", option_string):
+    if re.search(r"^(\d+,{0,1})+\d+$", option_string):
         return option_string
     else:
         return False
@@ -252,9 +252,6 @@ def find_wp_post(config, post_title):
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
     wp_search_api = f"{wp_api_url}wp/v2/search"
-    wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
-    wp_token = base64.b64encode(wp_credentials.encode())
-    wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     print(f"searching for {post_title}")
     search_payload = {
@@ -380,7 +377,7 @@ def fetch_lb_csv(csv_file_arg):
     # print_progress_bar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r")
     reader = csv.DictReader(csv_file)
     # Building an array because we need total count for a progress bar
-    movies = [l for l in reader]
+    movies = [line for line in reader]
 
     bar_prefix = "Movies:"
     bar_suffix = "Complete"
@@ -462,7 +459,7 @@ def wp_post(config, post, dry_run, post_id=False):
     wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     if dry_run:
-        print(f"DRY RUN: writing or updating post to WordPress.")
+        print("DRY RUN: writing or updating post to WordPress.")
     else:
         if post_id:
             response = requests.post(
@@ -560,9 +557,6 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
     wp_search_api = f"{wp_api_url}wp/v2/search"
-    wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
-    wp_token = base64.b64encode(wp_credentials.encode())
-    wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     # Convert date objects to beginning or end of day datetimes, as appropriate
     start_datetime = datetime.combine(start_date, datetime.min.time())
@@ -621,12 +615,6 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
 
 def write_movies_to_wp(config, dry_run, start_date, end_date):
     db_name = config["local"]["db_name"]
-
-    wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
-    wp_search_api = f"{wp_api_url}wp/v2/search"
-    wp_credentials = f'{config["wp"]["wp_user"]}:{config["wp"]["wp_key"]}'
-    wp_token = base64.b64encode(wp_credentials.encode())
-    wp_headers = {"Authorization": "Basic " + wp_token.decode("utf-8")}
 
     try:
         db_conn = sqlite3.connect(
