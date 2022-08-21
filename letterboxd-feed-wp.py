@@ -174,6 +174,7 @@ def clean_database(config, dry_run):
                 (str(review_html), movie["id"]),
             )
 
+    db_conn.commit()
     db_cur.close()
 
 
