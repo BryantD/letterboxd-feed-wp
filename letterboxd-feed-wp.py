@@ -36,39 +36,8 @@ import unicodedata
 
 from bs4 import BeautifulSoup, Comment
 import requests
+from tqdm import tqdm
 import xxhash
-
-
-# https://stackoverflow.com/a/34325723
-def print_progress_bar(
-    iteration,
-    total,
-    prefix="",
-    suffix="",
-    decimals=1,
-    length=100,
-    fill="█",
-    printEnd="\r",
-):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + "-" * (length - filledLength)
-    print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=printEnd)
-    # Print New Line on Complete
-    if iteration == total:
-        print()
 
 
 def oxfordcomma(titles):
@@ -134,9 +103,6 @@ def spoiler_check(lb_url):
         spoiler_flag = 1
     else:
         spoiler_flag = 0
-
-    # Nap a little to avoid too much traffic to Letterboxd
-    time.sleep(5)
 
     return spoiler_flag
 
@@ -384,21 +350,9 @@ def fetch_lb_csv(csv_file_arg):
     # Building an array because we need total count for a progress bar
     movies = [line for line in reader]
 
-    bar_prefix = "Movies:"
-    bar_suffix = "Complete"
-    bar_length = 50
-    bar_total_count = len(movies)
-    bar_current = 0
+    bar_prefix = "Movies"
 
-    print_progress_bar(
-        bar_current,
-        bar_total_count,
-        prefix=bar_prefix,
-        suffix=bar_suffix,
-        length=bar_length,
-    )
-
-    for row in movies:
+    for row in tqdm(movies, desc=bar_prefix):
         # CSV exports are Unicode text w/embedded HTML tags
         # We first add <p> tags and clean up Unicode, then drop <br/> tags in
         # We add spoiler tags when writing to WP, since that's where they
@@ -444,14 +398,8 @@ def fetch_lb_csv(csv_file_arg):
             }
         )
 
-        bar_current = bar_current + 1
-        print_progress_bar(
-            bar_current,
-            bar_total_count,
-            prefix=bar_prefix,
-            suffix=bar_suffix,
-            length=bar_length,
-        )
+        # Nap a little to avoid too much traffic to Letterboxd
+        time.sleep(2)
 
     return reviews
 
