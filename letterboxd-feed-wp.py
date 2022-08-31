@@ -26,18 +26,18 @@ import argparse
 import base64
 import configparser
 import csv
-from datetime import datetime, date, timedelta
-import feedparser
 import re
 import sqlite3
 import sys
 import time
 import unicodedata
+from datetime import date, datetime, timedelta
 
-from bs4 import BeautifulSoup, Comment
+import feedparser
 import requests
-from tqdm import tqdm
 import xxhash
+from bs4 import BeautifulSoup, Comment
+from tqdm import tqdm
 
 
 def oxfordcomma(titles):
