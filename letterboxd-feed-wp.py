@@ -424,14 +424,14 @@ def wp_post(config, post, dry_run, post_id=False):
                 )
             except requests.exceptions as error:
                 print(f"ERROR: post failed: {error}")
-            if response.status_code != requests.codes.ok:
+            if not response.ok:
                 print(f"ERROR: post failed w/status code {response.status_code}")
         else:
             try:
                 response = requests.post(wp_post_api, headers=wp_headers, json=post)
             except requests.exceptions as error:
                 print(f"ERROR: post failed: {error}")
-            if response.status_code != requests.codes.ok:
+            if not response.ok:
                 print(f"ERROR: post failed w/status code {response.status_code}")
 
 
