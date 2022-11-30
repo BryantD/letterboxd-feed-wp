@@ -308,15 +308,15 @@ def fetch_lb_rss(user):
                 spoiler_flag = 0
 
             # Either the date we watched the movie, or the date the review was published
-            if movie.letterboxd_watcheddate:
+            try:
                 timestamp = time.strptime(movie.letterboxd_watcheddate, "%Y-%m-%d")
-            else:
+            except AttributeError:
                 timestamp = movie.published_parsed
 
             # Handle null ratings
-            if movie.letterboxd_memberrating:
+            try:
                 rating = movie.letterboxd_memberrating
-            else:
+            except AttributeError:
                 rating = None
 
             clean_review = clean_rss_review_html(movie.summary, spoiler_flag)
