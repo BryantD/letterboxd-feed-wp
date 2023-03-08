@@ -173,8 +173,10 @@ def add_spoiler_field(csv_file_arg, dry_run):
 
 
 def find_wp_api_url(wp_base_url):
+    # Need a fake cookie to bypass the cache here
+    cookies = {"wordpress_bypass": "null"}
     try:
-        response = requests.head(wp_base_url)
+        response = requests.head(wp_base_url, cookies=cookies)
     except requests.RequestException as e:
         print(f"ERROR: couldn't get base WP URL {wp_base_url}: {e}")
         return False
