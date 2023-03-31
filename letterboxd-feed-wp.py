@@ -174,7 +174,7 @@ def add_spoiler_field(csv_file_arg, dry_run):
 
 def find_wp_api_url(wp_base_url):
     # Need a fake cookie to bypass the cache here
-    cookies = {"wordpress_bypass": "null"}
+    cookies = {"wptouch_switch_toggle": "True"}
     try:
         response = requests.head(wp_base_url, cookies=cookies)
     except requests.RequestException as e:
@@ -524,6 +524,8 @@ def write_movies_to_wp_by_week(config, dry_run, start_date, end_date):
     db_name = config["local"]["db_name"]
 
     wp_api_url = find_wp_api_url(config["wp"]["wp_url"])
+    if not wp_api_url:
+        return False
     wp_search_api = f"{wp_api_url}wp/v2/search"
 
     # Convert date objects to beginning or end of day datetimes, as appropriate
