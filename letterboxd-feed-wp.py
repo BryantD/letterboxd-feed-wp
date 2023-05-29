@@ -321,6 +321,12 @@ def fetch_lb_rss(user):
             except AttributeError:
                 rating = None
 
+            # Handle missing years
+            try:
+                film_year = movie.letterboxd_filmyear
+            except AttributeError:
+                film_year = "none"
+
             clean_review = clean_rss_review_html(movie.summary, spoiler_flag)
 
             reviews.append(
@@ -330,7 +336,7 @@ def fetch_lb_rss(user):
                     "id": movie.id,
                     "timestamp": timestamp,
                     "review": str(clean_review),
-                    "year": movie.letterboxd_filmyear,
+                    "year": film_year,
                     "rating": rating,
                     "spoiler": spoiler_flag,
                 }
@@ -453,7 +459,7 @@ def build_weekly_post(config, movie_list, week_start_datetime, week_end_datetime
     # Build the main body of the post
     for movie in movie_list:
         movie_title = movie[0]
-        movie_year = int(movie[4])
+        movie_year = movie[4]
 
         review_title = title_string(movie_title, movie_year, movie[5])
         title_list.append(f"{cite_start}{movie_title}{cite_end}")
