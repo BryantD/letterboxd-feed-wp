@@ -345,7 +345,7 @@ def fetch_lb_rss(user):
     return reviews
 
 
-def fetch_lb_csv(csv_file_arg):
+def fetch_lb_csv(csv_file_arg, dry_run, start_date, end_date):
     reviews = []
 
     try:
@@ -361,6 +361,12 @@ def fetch_lb_csv(csv_file_arg):
     bar_prefix = "Movies"
 
     for row in tqdm(movies, desc=bar_prefix):
+        if row["Watched Date"]:
+            if (
+                date.fromisoformat(row["Watched Date"]) < start_date
+                or date.fromisoformat(row["Watched Date"]) > end_date
+            ):
+                continue
         # CSV exports are Unicode text w/embedded HTML tags
         # We first add <p> tags and clean up Unicode, then drop <br/> tags in
         # We add spoiler tags when writing to WP, since that's where they
@@ -746,7 +752,7 @@ def main():
         reviews = fetch_lb_rss(config["lb"]["lb_user"])
         write_movies_to_db(config, reviews, args.dry_run)
     elif args.action == "fetchcsv":
-        reviews = fetch_lb_csv(args.csv)
+        reviews = fetch_lb_csv(args.csv, args.dry_run, args.start_date, args.end_date)
         write_movies_to_db(config, reviews, args.dry_run)
     elif args.action == "write":
         write_movies_to_wp(config, args.dry_run, args.start_date, args.end_date)

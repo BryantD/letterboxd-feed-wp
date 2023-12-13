@@ -3,4 +3,6 @@ lb_feed.conf
 Letterboxd Feed.bbprojectd
 lb_feed.sqlite
 csvs
-venv
+.venv
+reviews.csv
+*.bak
