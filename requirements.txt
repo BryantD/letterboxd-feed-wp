@@ -2,5 +2,5 @@ beautifulsoup4==4.12.3
 bs4==0.0.2
 feedparser==6.0.11
 requests==2.31.0
-tqdm==4.66.2
+tqdm==4.66.3
 xxhash==3.4.1
