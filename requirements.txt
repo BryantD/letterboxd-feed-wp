@@ -3,4 +3,4 @@ bs4==0.0.2
 feedparser==6.0.14
 tqdm==4.70.0
 requests==2.34.2
-xxhash==3.8.1
+xxhash==4.0.0
